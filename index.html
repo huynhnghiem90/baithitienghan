@@ -117,6 +117,8 @@
                     <p class="text-lg mb-2"><strong>Email:</strong> <span id="result-email"></span></p>
                     <p class="text-xl font-semibold text-indigo-600"><strong>Điểm trắc nghiệm:</strong> <span id="result-score-mcq"></span></p>
                     <p class="text-xl font-semibold text-teal-600"><strong>Điểm tự luận:</strong> <span id="result-score-fib"></span></p>
+                    <hr class="my-3">
+                    <p class="text-2xl font-bold text-green-600"><strong>Tổng điểm:</strong> <span id="result-score-total"></span></p>
                 </div>
                  <p class="text-sm text-gray-500 mt-6">Một email chứa kết quả chi tiết đã được soạn sẵn. Vui lòng nhấn gửi để hoàn tất.</p>
             </div>
@@ -125,7 +127,7 @@
         <!-- Loading Overlay -->
         <div id="loading-overlay" class="hidden items-center justify-center flex-col">
             <div class="loader"></div>
-            <p class="text-white text-lg mt-4">Thầy Nghiêm cute đang chấm bài tự luận, bạn vui lòng chờ...</p>
+            <p class="text-white text-lg mt-4">Thầy Nghiêm cute đang chấm bài, bạn vui lòng chờ...</p>
         </div>
 
     </div>
@@ -209,7 +211,7 @@
 
     function renderTest() {
         let html = '';
-        html += '<h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">Phần I: Trắc nghiệm</h2>';
+        html += '<h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">Phần I: Trắc nghiệm (50 điểm)</h2>';
         testData.multipleChoice.forEach((q, index) => {
             html += `<div class="question-card bg-white p-5 rounded-lg border border-gray-200 mb-4">
                         <p class="font-semibold text-gray-800 mb-4">${index + 1}. ${q.question}</p>
@@ -223,7 +225,7 @@
             html += `</div></div>`;
         });
 
-        html += '<h2 class="text-2xl font-bold text-gray-800 mt-8 mb-4 border-b pb-2">Phần II: Tự luận</h2>';
+        html += '<h2 class="text-2xl font-bold text-gray-800 mt-8 mb-4 border-b pb-2">Phần II: Tự luận (50 điểm)</h2>';
         html += '<h3 class="text-xl font-semibold text-gray-700 mb-4">A. Dựa vào các cấu trúc ngữ pháp đã cho, hãy viết một câu hoàn chỉnh.</h3>';
         testData.fillInTheBlank.filter(q => q.type === 'construct').forEach((q, index) => {
              html += `<div class="question-card bg-white p-5 rounded-lg border border-gray-200 mb-4">
@@ -249,7 +251,7 @@
             ? `Đây là một câu hỏi yêu cầu đặt câu tiếng Hàn theo cấu trúc: "${question.question}". Câu trả lời mẫu là: "${correctAnswer}".`
             : `Đây là một câu hỏi dịch thuật từ tiếng Hàn sang tiếng Việt. Câu cần dịch là: "${question.question}". Câu trả lời mẫu là: "${correctAnswer}".`;
 
-        const prompt = `${typeInstruction} Câu trả lời của thí sinh là: "${userAnswer}". Hãy đánh giá câu trả lời này. Chỉ trả lời dưới dạng một đối tượng JSON duy nhất có cấu trúc: {"grade": "Đúng" | "Gần đúng" | "Sai", "feedback": "lời nhận xét ngắn gọn bằng tiếng Việt"}. "Đúng" cho 1 điểm, "Gần đúng" cho 0.5 điểm, "Sai" cho 0 điểm. Đánh giá dựa trên ngữ pháp, ý nghĩa và sự chính xác.`;
+        const prompt = `${typeInstruction} Câu trả lời của thí sinh là: "${userAnswer}". Hãy đánh giá câu trả lời này. Chỉ trả lời dưới dạng một đối tượng JSON duy nhất có cấu trúc: {"grade": "Đúng" | "Gần đúng" | "Sai", "feedback": "lời nhận xét ngắn gọn bằng tiếng Việt"}. "Đúng" cho 2.5 điểm, "Gần đúng" cho 1.25 điểm, "Sai" cho 0 điểm. Đánh giá dựa trên ngữ pháp, ý nghĩa và sự chính xác.`;
 
         try {
             const apiKey = ""; // Leave empty, handled by the environment
@@ -289,13 +291,16 @@
         }
     }
     
-    function sendResultsByEmail(mcqScore, fibScore, totalMcq, totalFib, answers) {
-        const subject = `Kết quả bài thi Tiếng Hàn của ${userInfo.name}`;
+    function sendResultsByEmail(mcqScore, fibScore, answers) {
+        const totalScore = mcqScore + fibScore;
+        const subject = `Kết quả bài thi Tiếng Hàn của ${userInfo.name} - Tổng điểm: ${totalScore.toFixed(2)}/100`;
+        
         let body = `Thí sinh: ${userInfo.name}\n`;
         body += `Email: ${userInfo.email}\n\n`;
         body += `--- TỔNG KẾT ---\n`;
-        body += `Điểm trắc nghiệm: ${mcqScore} / ${totalMcq}\n`;
-        body += `Điểm tự luận (AI chấm): ${fibScore.toFixed(1)} / ${totalFib}\n\n`;
+        body += `Điểm trắc nghiệm: ${mcqScore} / 50\n`;
+        body += `Điểm tự luận (AI chấm): ${fibScore.toFixed(2)} / 50\n`;
+        body += `TỔNG ĐIỂM: ${totalScore.toFixed(2)} / 100\n\n`;
         
         body += `--- CHI TIẾT BÀI LÀM ---\n\n`;
         
@@ -359,16 +364,16 @@
         let fibScore = 0;
         const userAnswers = { mcq: [], fib: [] };
 
-        // Grade multiple choice
+        // Grade multiple choice (2 points per question)
         testData.multipleChoice.forEach((q, index) => {
             const userAnswer = formData.get(`mcq-${index}`);
             userAnswers.mcq.push({ question: q.question, answer: userAnswer });
             if (userAnswer === q.answer) {
-                mcqScore++;
+                mcqScore += 2;
             }
         });
 
-        // Grade free-form answers with AI
+        // Grade free-form answers with AI (2.5 points per question)
         for (let i = 0; i < testData.fillInTheBlank.length; i++) {
             const question = testData.fillInTheBlank[i];
             const userAnswer = formData.get(`fib-${i}`);
@@ -382,25 +387,28 @@
             });
 
             if (aiResult.grade === 'Đúng') {
-                fibScore += 1;
+                fibScore += 2.5;
             } else if (aiResult.grade === 'Gần đúng') {
-                fibScore += 0.5;
+                fibScore += 1.25; // Half points for 'nearly correct'
             }
         }
         
         loadingOverlay.classList.add('hidden');
         loadingOverlay.classList.remove('flex');
 
+        const totalScore = mcqScore + fibScore;
+
         // --- Display Results ---
         document.getElementById('result-name').textContent = userInfo.name;
         document.getElementById('result-email').textContent = userInfo.email;
-        document.getElementById('result-score-mcq').textContent = `${mcqScore} / ${testData.multipleChoice.length}`;
-        document.getElementById('result-score-fib').textContent = `${fibScore.toFixed(1)} / ${testData.fillInTheBlank.length}`;
+        document.getElementById('result-score-mcq').textContent = `${mcqScore} / 50`;
+        document.getElementById('result-score-fib').textContent = `${fibScore.toFixed(2)} / 50`;
+        document.getElementById('result-score-total').textContent = `${totalScore.toFixed(2)} / 100`;
         
         showScreen('result');
         
         // --- Prepare and trigger email ---
-        sendResultsByEmail(mcqScore, fibScore, testData.multipleChoice.length, testData.fillInTheBlank.length, userAnswers);
+        sendResultsByEmail(mcqScore, fibScore, userAnswers);
     });
 
 </script>
