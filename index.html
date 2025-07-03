@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" class="notranslate" translate="no">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google" content="notranslate">
     <title>Bài Thi Tiếng Hàn Trực Tuyến</title>
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -40,18 +41,20 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        #loading-overlay, #screenshot-overlay {
+        #loading-overlay, #focus-lost-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.7);
+            background-color: rgba(0,0,0,0.85);
             z-index: 9999;
             display: none; /* Initially hidden */
             align-items: center;
             justify-content: center;
             flex-direction: column;
+            text-align: center;
+            padding: 1rem;
         }
         /* Anti-screenshot style for print media */
         @media print {
@@ -152,8 +155,9 @@
             <div class="loader"></div>
             <p class="text-white text-lg mt-4">Thầy Nghiêm cute đang chấm bài, bạn vui lòng chờ...</p>
         </div>
-        <div id="screenshot-overlay">
-            <p class="text-white text-2xl font-bold">Hành vi chụp ảnh màn hình không được phép!</p>
+        <div id="focus-lost-overlay">
+            <p class="text-white text-2xl font-bold">Vui lòng không rời khỏi màn hình thi!</p>
+            <p class="text-white text-lg mt-2">Hành vi này có thể bị xem là gian lận.</p>
         </div>
 
     </div>
@@ -220,7 +224,7 @@
         result: document.getElementById('result-screen')
     };
     const loadingOverlay = document.getElementById('loading-overlay');
-    const screenshotOverlay = document.getElementById('screenshot-overlay');
+    const focusLostOverlay = document.getElementById('focus-lost-overlay');
     const startFormBtn = document.getElementById('start-form-btn');
     const infoForm = document.getElementById('info-form');
     const testForm = document.getElementById('test-form');
@@ -273,26 +277,23 @@
         questionsContainer.innerHTML = html;
     }
 
-    // Function to normalize Vietnamese text
+    // Function to normalize Vietnamese text for better AI matching
     function normalizeText(text) {
         if (!text) return "";
         return text
             .toLowerCase()
-            .normalize("NFD") // Decompose combined graphemes into base characters and diacritics
+            .normalize("NFD") // Decompose combined graphemes
             .replace(/[\u0300-\u036f]/g, "") // Remove diacritics
             .replace(/[.,?]/g, "") // Remove common punctuation
             .trim();
     }
 
     async function gradeWithAI(question, userAnswer, correctAnswer) {
-        const normalizedUserAnswer = normalizeText(userAnswer);
-        const normalizedCorrectAnswer = normalizeText(correctAnswer);
-
         const typeInstruction = question.type === 'construct' 
             ? `Đây là một câu hỏi yêu cầu đặt câu tiếng Hàn theo cấu trúc: "${question.question}". Câu trả lời mẫu là: "${correctAnswer}".`
             : `Đây là một câu hỏi dịch thuật từ tiếng Hàn sang tiếng Việt. Câu cần dịch là: "${question.question}". Câu trả lời mẫu là: "${correctAnswer}".`;
 
-        const prompt = `${typeInstruction} Câu trả lời của thí sinh là: "${userAnswer}". Phiên bản đã được chuẩn hóa (không dấu, không chấm câu) của câu trả lời là "${normalizedUserAnswer}". Hãy đánh giá câu trả lời của thí sinh một cách linh hoạt, không quá khắt khe về dấu câu hoặc việc có dấu/không dấu, miễn là ý nghĩa cốt lõi đúng. Chỉ trả lời dưới dạng một đối tượng JSON duy nhất có cấu trúc: {"grade": "Đúng" | "Gần đúng" | "Sai", "feedback": "lời nhận xét ngắn gọn bằng tiếng Việt"}. "Đúng" cho 2.5 điểm, "Gần đúng" cho 1.25 điểm, "Sai" cho 0 điểm.`;
+        const prompt = `${typeInstruction} Câu trả lời của thí sinh là: "${userAnswer}". Hãy đánh giá câu trả lời này một cách linh hoạt, không quá khắt khe về dấu câu hoặc việc có dấu/không dấu, miễn là ý nghĩa cốt lõi đúng. Chỉ trả lời dưới dạng một đối tượng JSON duy nhất có cấu trúc: {"grade": "Đúng" | "Gần đúng" | "Sai", "feedback": "lời nhận xét ngắn gọn bằng tiếng Việt"}. "Đúng" cho 2.5 điểm, "Gần đúng" cho 1.25 điểm, "Sai" cho 0 điểm.`;
 
         try {
             const apiKey = ""; // Leave empty, handled by the environment
@@ -319,16 +320,23 @@
             });
 
             if (!response.ok) {
-                 throw new Error(`API Error: ${response.statusText}`);
+                 const errorBody = await response.text();
+                 console.error("API Error Response:", errorBody);
+                 throw new Error(`API Error: ${response.status} ${response.statusText}`);
             }
 
             const result = await response.json();
+            
+            if (!result.candidates || !result.candidates[0].content.parts[0].text) {
+                throw new Error("Invalid AI response structure");
+            }
+
             const jsonText = result.candidates[0].content.parts[0].text;
             return JSON.parse(jsonText);
 
         } catch (error) {
             console.error("Lỗi khi chấm điểm bằng AI:", error);
-            return { grade: "Lỗi", feedback: "Không thể chấm điểm câu này." };
+            return { grade: "Lỗi", feedback: "ßGV sẽ chấm thủ công." };
         }
     }
     
@@ -360,9 +368,10 @@
         body += `**Phần II: Tự luận**\n`;
         answers.fib.forEach((ans, i) => {
             const question = testData.fillInTheBlank[i];
+            const gradeText = ans.grade === "Lỗi" ? "Cần chấm thủ công" : `${ans.grade} - ${ans.feedback}`;
             body += `${i + 1}. ${question.question}\n`;
             body += `   - Trả lời: ${ans.answer}\n`;
-            body += `   - Đánh giá của GV: ${ans.grade} - ${ans.feedback}\n\n`;
+            body += `   - Đánh giá của AI: ${gradeText}\n\n`;
         });
         
         const yourEmail = "huynhnghiem90@gmail.com"; 
@@ -383,7 +392,9 @@
         });
     };
 
-    startFormBtn.addEventListener('click', () => showScreen('info'));
+    startFormBtn.addEventListener('click', () => {
+        showScreen('info');
+    });
 
     infoForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -393,6 +404,15 @@
         };
         renderTest();
         showScreen('test');
+        // Activate anti-cheating measures only when the test starts
+        window.addEventListener('blur', () => {
+             if(document.visibilityState === 'hidden') {
+                focusLostOverlay.style.display = 'flex';
+             }
+        });
+        window.addEventListener('focus', () => {
+            focusLostOverlay.style.display = 'none';
+        });
     });
 
     testForm.addEventListener('submit', async (e) => {
@@ -451,25 +471,26 @@
     });
 
     // Anti-cheating listeners
-    document.addEventListener('copy', (e) => {
-        e.preventDefault();
-    });
+    document.addEventListener('copy', (e) => e.preventDefault());
+    document.addEventListener('cut', (e) => e.preventDefault());
+    document.addEventListener('paste', (e) => e.preventDefault());
 
+    // This is a basic deterrent. A determined user can still find ways.
     window.addEventListener('keyup', (e) => {
         if (e.key == 'PrintScreen') {
-            screenshotOverlay.style.display = 'flex';
+            navigator.clipboard.writeText(''); // Attempt to clear clipboard
+            focusLostOverlay.style.display = 'flex';
             setTimeout(() => {
-                screenshotOverlay.style.display = 'none';
+                focusLostOverlay.style.display = 'none';
             }, 3000);
         }
     });
 
     window.addEventListener('keydown', (e) => {
-        if (e.ctrlKey && e.key == 'p') {
+        if (e.ctrlKey && (e.key == 'p' || e.key == 'c' || e.key == 'x')) {
             e.preventDefault();
         }
     });
-
 
 </script>
 
