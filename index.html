@@ -22,14 +22,27 @@
         .btn:hover {
             transform: translateY(-2px);
         }
-        /* Hide number input arrows */
-        input[type=number]::-webkit-inner-spin-button,
-        input[type=number]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
+        /* Loading spinner */
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 5px solid #3498db;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
         }
-        input[type=number] {
-            -moz-appearance: textfield;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.6);
+            z-index: 9999;
         }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -40,7 +53,7 @@
 
     <div class="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-6 md:p-8">
 
-        <!-- Screen 1: QR Code & Welcome -->
+        <!-- Screen 1: Welcome -->
         <div id="welcome-screen">
             <div class="text-center">
                 <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-2">Bài Thi Tiếng Hàn</h1>
@@ -83,9 +96,8 @@
                 <p class="text-gray-500 mt-2">Thời gian làm bài: 60 phút</p>
             </div>
             <form id="test-form">
-                <!-- Questions will be dynamically inserted here -->
                 <div id="questions-container"></div>
-                <button type="submit" class="w-full mt-8 bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-green-700 btn">
+                <button type="submit" id="submit-btn" class="w-full mt-8 bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-green-700 btn">
                     Nộp bài
                 </button>
             </form>
@@ -102,17 +114,24 @@
                 <div class="bg-gray-50 p-6 rounded-lg text-left">
                     <h2 class="font-bold text-xl mb-4">Kết quả của bạn</h2>
                     <p class="text-lg"><strong>Thí sinh:</strong> <span id="result-name"></span></p>
-                    <p class="text-lg mb-4"><strong>Email:</strong> <span id="result-email"></span></p>
-                    <p class="text-2xl font-bold text-indigo-600"><strong>Điểm trắc nghiệm:</strong> <span id="result-score"></span></p>
+                    <p class="text-lg mb-2"><strong>Email:</strong> <span id="result-email"></span></p>
+                    <p class="text-xl font-semibold text-indigo-600"><strong>Điểm trắc nghiệm:</strong> <span id="result-score-mcq"></span></p>
+                    <p class="text-xl font-semibold text-teal-600"><strong>Điểm tự luận:</strong> <span id="result-score-fib"></span></p>
                 </div>
                  <p class="text-sm text-gray-500 mt-6">Một email chứa kết quả chi tiết đã được soạn sẵn. Vui lòng nhấn gửi để hoàn tất.</p>
             </div>
         </div>
+        
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="hidden items-center justify-center flex-col">
+            <div class="loader"></div>
+            <p class="text-white text-lg mt-4">Thầy Nghiêm cute đang chấm bài tự luận, bạn vui lòng chờ...</p>
+        </div>
+
     </div>
 
 <script>
-    // --- DATABASE OF QUESTIONS ---
-    // All questions from the document are stored here.
+    // --- DATABASE OF QUESTIONS AND ANSWERS ---
     const testData = {
         multipleChoice: [
             { question: "Điền từ thích hợp vào chỗ trống: 이것은 ( )입니까? - 책상입니다.", options: ["어디", "무엇", "언제", "무슨"], answer: "무엇" },
@@ -142,26 +161,26 @@
             { question: "'-고' được dùng để:", options: ["Nối hai danh từ với nghĩa 'và'.", "Nối hai câu hoặc mệnh đề.", "Thể hiện sự đối lập 'nhưng'.", "Chỉ nơi chốn xảy ra hành động."], answer: "Nối hai câu hoặc mệnh đề." }
         ],
         fillInTheBlank: [
-            { question: "N은/는 N입니다.", type: "construct" },
-            { question: "N이/가 아닙니다.", type: "construct" },
-            { question: "N에서 V-ㅂ니다/습니다.", type: "construct" },
-            { question: "V-지 않습니다.", type: "construct" },
-            { question: "S-고 S.", type: "construct" },
-            { question: "N와/과 N.", type: "construct" },
-            { question: "V-았/었어요.", type: "construct" },
-            { question: "N도.", type: "construct" },
-            { question: "V/A-아요/어요.", type: "construct" },
-            { question: "S-지만 S.", type: "construct" },
-            { question: "제 이름은 김영숙입니다.", type: "translate" },
-            { question: "여기는 어디입니까?", type: "translate" },
-            { question: "철수 씨도 같이 도서관에 갑니다.", type: "translate" },
-            { question: "오늘은 날씨가 어떻습니까?", type: "translate" },
-            { question: "주말에는 집에서 쉽니다.", type: "translate" },
-            { question: "내 방에는 책상과 침대가 있어요.", type: "translate" },
-            { question: "시내에서 친구를 만났어요.", type: "translate" },
-            { question: "음악이 아주 좋았어요.", type: "translate" },
-            { question: "언제 한국에 오셨어요?", type: "translate" },
-            { question: "한국어 공부가 재미있지만 어려워요.", type: "translate" }
+            { question: "N은/는 N입니다.", type: "construct", answer: "저는 학생입니다." },
+            { question: "N이/가 아닙니다.", type: "construct", answer: "이것은 구두가 아닙니다." },
+            { question: "N에서 V-ㅂ니다/습니다.", type: "construct", answer: "도서관에서 책을 읽습니다." },
+            { question: "V-지 않습니다.", type: "construct", answer: "저는 학교에 가지 않습니다." },
+            { question: "S-고 S.", type: "construct", answer: "텔레비전을 보고 책을 읽습니다." },
+            { question: "N와/과 N.", type: "construct", answer: "책상과 의자가 있습니다." },
+            { question: "V-았/었어요.", type: "construct", answer: "어제 영화를 보았어요." },
+            { question: "N도.", type: "construct", answer: "저도 학생입니다." },
+            { question: "V/A-아요/어요.", type: "construct", answer: "날씨가 좋아요." },
+            { question: "S-지만 S.", type: "construct", answer: "한국어는 재미있지만 어려워요." },
+            { question: "제 이름은 김영숙입니다.", type: "translate", answer: "Tên của tôi là Kim Youngsook." },
+            { question: "여기는 어디입니까?", type: "translate", answer: "Đây là đâu?" },
+            { question: "철수 씨도 같이 도서관에 갑니다.", type: "translate", answer: "Anh Chulsoo cũng đi đến thư viện cùng." },
+            { question: "오늘은 날씨가 어떻습니까?", type: "translate", answer: "Thời tiết hôm nay thế nào?" },
+            { question: "주말에는 집에서 쉽니다.", type: "translate", answer: "Vào cuối tuần tôi nghỉ ngơi ở nhà." },
+            { question: "내 방에는 책상과 침대가 있어요.", type: "translate", answer: "Trong phòng của tôi có bàn và giường." },
+            { question: "시내에서 친구를 만났어요.", type: "translate", answer: "Tôi đã gặp bạn ở trung tâm thành phố." },
+            { question: "음악이 아주 좋았어요.", type: "translate", answer: "Âm nhạc đã rất hay." },
+            { question: "언제 한국에 오셨어요?", type: "translate", answer: "Bạn đã đến Hàn Quốc khi nào?" },
+            { question: "한국어 공부가 재미있지만 어려워요.", type: "translate", answer: "Việc học tiếng Hàn thú vị nhưng khó." }
         ]
     };
 
@@ -172,6 +191,7 @@
         test: document.getElementById('test-screen'),
         result: document.getElementById('result-screen')
     };
+    const loadingOverlay = document.getElementById('loading-overlay');
     const startFormBtn = document.getElementById('start-form-btn');
     const infoForm = document.getElementById('info-form');
     const testForm = document.getElementById('test-form');
@@ -182,17 +202,13 @@
 
     // --- FUNCTIONS ---
 
-    // Function to switch between screens
     function showScreen(screenName) {
         Object.values(screens).forEach(screen => screen.classList.add('hidden'));
         screens[screenName].classList.remove('hidden');
     }
 
-    // Function to render all questions
     function renderTest() {
         let html = '';
-        
-        // Part 1: Multiple Choice
         html += '<h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">Phần I: Trắc nghiệm</h2>';
         testData.multipleChoice.forEach((q, index) => {
             html += `<div class="question-card bg-white p-5 rounded-lg border border-gray-200 mb-4">
@@ -207,7 +223,6 @@
             html += `</div></div>`;
         });
 
-        // Part 2: Free Response
         html += '<h2 class="text-2xl font-bold text-gray-800 mt-8 mb-4 border-b pb-2">Phần II: Tự luận</h2>';
         html += '<h3 class="text-xl font-semibold text-gray-700 mb-4">A. Dựa vào các cấu trúc ngữ pháp đã cho, hãy viết một câu hoàn chỉnh.</h3>';
         testData.fillInTheBlank.filter(q => q.type === 'construct').forEach((q, index) => {
@@ -228,14 +243,59 @@
 
         questionsContainer.innerHTML = html;
     }
+
+    async function gradeWithAI(question, userAnswer, correctAnswer) {
+        const typeInstruction = question.type === 'construct' 
+            ? `Đây là một câu hỏi yêu cầu đặt câu tiếng Hàn theo cấu trúc: "${question.question}". Câu trả lời mẫu là: "${correctAnswer}".`
+            : `Đây là một câu hỏi dịch thuật từ tiếng Hàn sang tiếng Việt. Câu cần dịch là: "${question.question}". Câu trả lời mẫu là: "${correctAnswer}".`;
+
+        const prompt = `${typeInstruction} Câu trả lời của thí sinh là: "${userAnswer}". Hãy đánh giá câu trả lời này. Chỉ trả lời dưới dạng một đối tượng JSON duy nhất có cấu trúc: {"grade": "Đúng" | "Gần đúng" | "Sai", "feedback": "lời nhận xét ngắn gọn bằng tiếng Việt"}. "Đúng" cho 1 điểm, "Gần đúng" cho 0.5 điểm, "Sai" cho 0 điểm. Đánh giá dựa trên ngữ pháp, ý nghĩa và sự chính xác.`;
+
+        try {
+            const apiKey = ""; // Leave empty, handled by the environment
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "grade": { "type": "STRING" },
+                            "feedback": { "type": "STRING" }
+                        }
+                    }
+                }
+            };
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                 throw new Error(`API Error: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            const jsonText = result.candidates[0].content.parts[0].text;
+            return JSON.parse(jsonText);
+
+        } catch (error) {
+            console.error("Lỗi khi chấm điểm bằng AI:", error);
+            return { grade: "Lỗi", feedback: "Không thể chấm điểm câu này." };
+        }
+    }
     
-    // Function to create and send email with results
-    function sendResultsByEmail(score, total, answers) {
+    function sendResultsByEmail(mcqScore, fibScore, totalMcq, totalFib, answers) {
         const subject = `Kết quả bài thi Tiếng Hàn của ${userInfo.name}`;
         let body = `Thí sinh: ${userInfo.name}\n`;
         body += `Email: ${userInfo.email}\n\n`;
-        body += `--- KẾT QUẢ ---\n`;
-        body += `Điểm trắc nghiệm: ${score} / ${total}\n\n`;
+        body += `--- TỔNG KẾT ---\n`;
+        body += `Điểm trắc nghiệm: ${mcqScore} / ${totalMcq}\n`;
+        body += `Điểm tự luận (AI chấm): ${fibScore.toFixed(1)} / ${totalFib}\n\n`;
         
         body += `--- CHI TIẾT BÀI LÀM ---\n\n`;
         
@@ -251,26 +311,21 @@
             body += `\n`;
         });
 
-        body += `**Phần II: Tự luận**\n`;
+        body += `**Phần II: Tự luận (AI Chấm)**\n`;
         answers.fib.forEach((ans, i) => {
             const question = testData.fillInTheBlank[i];
-            const typeText = question.type === 'construct' ? 'Đặt câu' : 'Dịch';
-            body += `${i + 1}. [${typeText}] ${question.question}\n`;
-            body += `   - Trả lời: ${ans.answer}\n\n`;
+            body += `${i + 1}. ${question.question}\n`;
+            body += `   - Trả lời: ${ans.answer}\n`;
+            body += `   - Đánh giá của AI: ${ans.grade} - ${ans.feedback}\n\n`;
         });
         
-        // IMPORTANT: Replace with your actual email address
         const yourEmail = "huynhnghiem90@gmail.com"; 
-        
         const mailtoLink = `mailto:${yourEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        
-        // Open the user's default email client
         window.location.href = mailtoLink;
     }
 
     // --- EVENT LISTENERS ---
 
-    // Generate QR Code on page load
     window.onload = function() {
         new QRCode(qrcodeContainer, {
             text: window.location.href,
@@ -282,12 +337,8 @@
         });
     };
 
-    // Start button -> Show info form
-    startFormBtn.addEventListener('click', () => {
-        showScreen('info');
-    });
+    startFormBtn.addEventListener('click', () => showScreen('info'));
 
-    // Info form submission -> Store info and show test
     infoForm.addEventListener('submit', (e) => {
         e.preventDefault();
         userInfo = {
@@ -298,13 +349,14 @@
         showScreen('test');
     });
 
-    // Test form submission -> Grade test and show results
-    testForm.addEventListener('submit', (e) => {
+    testForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        loadingOverlay.classList.remove('hidden');
+        loadingOverlay.classList.add('flex');
         
-        // --- Grading Logic ---
         const formData = new FormData(testForm);
-        let score = 0;
+        let mcqScore = 0;
+        let fibScore = 0;
         const userAnswers = { mcq: [], fib: [] };
 
         // Grade multiple choice
@@ -312,29 +364,46 @@
             const userAnswer = formData.get(`mcq-${index}`);
             userAnswers.mcq.push({ question: q.question, answer: userAnswer });
             if (userAnswer === q.answer) {
-                score++;
+                mcqScore++;
             }
         });
 
-        // Collect free-form answers
-        testData.fillInTheBlank.forEach((q, index) => {
-            const userAnswer = formData.get(`fib-${index}`);
-            userAnswers.fib.push({ question: q.question, answer: userAnswer });
-        });
+        // Grade free-form answers with AI
+        for (let i = 0; i < testData.fillInTheBlank.length; i++) {
+            const question = testData.fillInTheBlank[i];
+            const userAnswer = formData.get(`fib-${i}`);
+            const aiResult = await gradeWithAI(question, userAnswer, question.answer);
+            
+            userAnswers.fib.push({ 
+                question: question.question, 
+                answer: userAnswer,
+                grade: aiResult.grade,
+                feedback: aiResult.feedback
+            });
+
+            if (aiResult.grade === 'Đúng') {
+                fibScore += 1;
+            } else if (aiResult.grade === 'Gần đúng') {
+                fibScore += 0.5;
+            }
+        }
+        
+        loadingOverlay.classList.add('hidden');
+        loadingOverlay.classList.remove('flex');
 
         // --- Display Results ---
         document.getElementById('result-name').textContent = userInfo.name;
         document.getElementById('result-email').textContent = userInfo.email;
-        document.getElementById('result-score').textContent = `${score} / ${testData.multipleChoice.length}`;
+        document.getElementById('result-score-mcq').textContent = `${mcqScore} / ${testData.multipleChoice.length}`;
+        document.getElementById('result-score-fib').textContent = `${fibScore.toFixed(1)} / ${testData.fillInTheBlank.length}`;
         
         showScreen('result');
         
         // --- Prepare and trigger email ---
-        sendResultsByEmail(score, testData.multipleChoice.length, userAnswers);
+        sendResultsByEmail(mcqScore, fibScore, testData.multipleChoice.length, testData.fillInTheBlank.length, userAnswers);
     });
 
 </script>
 
 </body>
 </html>
-
